@@ -129,16 +129,26 @@ public class TPartCacheMgr implements RemoteRecordReceiver {
 //		localCcMgr.beforeSinkRead(key, tx.getTransactionNumber());
 //		lockTable.sLock(key, tx.getTransactionNumber());
 		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		
 		CachedRecord rec = null;
 		
 		// Check the cache first
 		rec = recordCache.get(key);
-		if (rec != null) // Copy the record to ensure thread-safety
+		if (rec != null) {
+			// Copy the record to ensure thread-safety
 			rec = new CachedRecord(rec);
+		}
+			
 		
 		// Read from the local storage
-		if (rec == null)
+		if (rec == null) {
+			// PROFILE
+			profiler.startComponentProfiler("VanillaCoreCrud.read");
 			rec = VanillaCoreCrud.read(key, tx);
+			profiler.stopComponentProfiler("VanillaCoreCrud.read");
+		}
+			
 		
 //		localCcMgr.afterSinkRead(key, tx.getTransactionNumber());
 //		lockTable.release(key, tx.getTransactionNumber(), LockType.S_LOCK);

@@ -47,6 +47,7 @@ import org.vanilladb.core.storage.metadata.index.IndexInfo;
 import org.vanilladb.core.storage.record.RecordFile;
 import org.vanilladb.core.storage.record.RecordId;
 import org.vanilladb.core.storage.tx.Transaction;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * The CURD interfaces to VanillaCore.
@@ -188,6 +189,7 @@ public class VanillaCoreCrud {
 	}
 
 	public static boolean update(PrimaryKey key, CachedRecord rec, Transaction tx) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		boolean found = false;
 		String tblName = key.getTableName();
 		
@@ -231,6 +233,8 @@ public class VanillaCoreCrud {
 			
 			RecordId rid = s.getRecordId();
 			
+			
+			profiler.startComponentProfiler("updateIndex");
 			// Update the indexes
 			for (Index index : modifiedIndexes) {
 				// Construct a SearchKey for the old value
@@ -261,6 +265,7 @@ public class VanillaCoreCrud {
 				
 				index.close();
 			}
+			profiler.stopComponentProfiler("updateIndex");
 		}
 		
 		// Close opened indexes and the record file
@@ -278,6 +283,7 @@ public class VanillaCoreCrud {
 	}
 
 	public static void insert(PrimaryKey key, CachedRecord rec, Transaction tx) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		String tblname = key.getTableName();
 		
 //		Timer.getLocalTimer().startComponentTimer("Insert to table " + tblname);
@@ -299,11 +305,13 @@ public class VanillaCoreCrud {
 			indexes.addAll(iis);
 		}
 		
+		profiler.startComponentProfiler("insertIndex");
 		for (IndexInfo ii : indexes) {
 			Index idx = ii.open(tx);
 			idx.insert(new SearchKey(ii.fieldNames(), rec.toFldValMap()), rid, true);
 			idx.close();
 		}
+		profiler.stopComponentProfiler("insertIndex");
 		
 		tx.endStatement();
 //		Timer.getLocalTimer().stopComponentTimer("Insert to table " + tblname);

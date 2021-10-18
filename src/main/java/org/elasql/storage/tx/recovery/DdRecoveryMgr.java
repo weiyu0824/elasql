@@ -27,6 +27,7 @@ import org.vanilladb.core.server.VanillaDb;
 import org.vanilladb.core.server.task.Task;
 import org.vanilladb.core.storage.tx.Transaction;
 import org.vanilladb.core.storage.tx.recovery.RecoveryMgr;
+import org.vanilladb.core.util.TransactionProfiler;
 
 public class DdRecoveryMgr extends RecoveryMgr {
 
@@ -53,8 +54,12 @@ public class DdRecoveryMgr extends RecoveryMgr {
 				while (true) {
 					try {
 						StoredProcedureCall spc = spcLogQueue.take();
+						// PROFILE
+						TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+						profiler.startComponentProfiler("StoreRequestLog");
 						new StoredProcRequestRecord(spc.getTxNum(), spc.getClientId(), spc.getConnectionId(), spc.getPid(),
 								spc.getPars()).writeToLog();
+						profiler.stopComponentProfiler("StoreRequestLog");
 						// synchronized (spcLoggerSyncObj) {
 						try {
 							spcLoggerLock.lock();
