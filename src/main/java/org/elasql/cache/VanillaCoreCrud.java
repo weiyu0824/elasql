@@ -59,13 +59,20 @@ public class VanillaCoreCrud {
 		TablePlan tp = new TablePlan(tblName, tx);
 		Plan selectPlan = null;
 		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		
+		
+		profiler.startComponentProfiler("readSelectByBestMatchedIndex");
 		// Create a IndexSelectPlan if there is matching index in the predicate
 		selectPlan = selectByBestMatchedIndex(tblName, tp, key, tx);
 		if (selectPlan == null)
 			selectPlan = new SelectPlan(tp, key.toPredicate());
 		else
 			selectPlan = new SelectPlan(selectPlan, key.toPredicate());
+		profiler.stopComponentProfiler("readSelectByBestMatchedIndex");
 		
+		
+		profiler.startComponentProfiler("read");
 		SelectScan s = (SelectScan) selectPlan.open();
 		s.beforeFirst();
 		CachedRecord rec = null;
@@ -76,6 +83,7 @@ public class VanillaCoreCrud {
 				rec.addFldVal(fld, s.getVal(fld));
 		}
 		s.close();
+		profiler.stopComponentProfiler("read");
 		
 		tx.endStatement();
 
@@ -198,13 +206,16 @@ public class VanillaCoreCrud {
 		TablePlan tp = new TablePlan(tblName, tx);
 		Plan selectPlan = null;
 		
+		profiler.startComponentProfiler("updateSelectByBestMatchedIndex");
 		// Create a IndexSelectPlan if there is matching index in the predicate
 		selectPlan = selectByBestMatchedIndex(tblName, tp, key, tx, rec.getDirtyFldNames());
 		if (selectPlan == null)
 			selectPlan = new SelectPlan(tp, key.toPredicate());
 		else
 			selectPlan = new SelectPlan(selectPlan, key.toPredicate());
+		profiler.stopComponentProfiler("updateSelectByBestMatchedIndex");
 		
+		profiler.startComponentProfiler("openUpdateIndexFile");
 		// Open all indexes associate with target fields
 		Set<Index> modifiedIndexes = new HashSet<Index>();
 		for (String fieldName : rec.getDirtyFldNames()) {
@@ -212,6 +223,7 @@ public class VanillaCoreCrud {
 			for (IndexInfo ii : iiList)
 				modifiedIndexes.add(ii.open(tx));
 		}
+		profiler.stopComponentProfiler("openUpdateIndexFile");
 		
 		// Open the scan
 		UpdateScan s = (UpdateScan) selectPlan.open();
@@ -219,6 +231,7 @@ public class VanillaCoreCrud {
 		while (s.next()) {
 			found = true;
 			
+			profiler.startComponentProfiler("update");
 			// Construct a mapping from field names to values
 			Map<String, Constant> oldValMap = new HashMap<String, Constant>();
 			Map<String, Constant> newValMap = new HashMap<String, Constant>();
@@ -232,7 +245,7 @@ public class VanillaCoreCrud {
 			}
 			
 			RecordId rid = s.getRecordId();
-			
+			profiler.stopComponentProfiler("update");
 			
 			profiler.startComponentProfiler("updateIndex");
 			// Update the indexes
@@ -268,9 +281,11 @@ public class VanillaCoreCrud {
 			profiler.stopComponentProfiler("updateIndex");
 		}
 		
+		profiler.startComponentProfiler("updateCloseIndex");
 		// Close opened indexes and the record file
 		for (Index index : modifiedIndexes)
 			index.close();
+		profiler.stopComponentProfiler("updateCloseIndex");
 		s.close();
 		
 		tx.endStatement();
@@ -290,6 +305,7 @@ public class VanillaCoreCrud {
 		
 		Plan p = new TablePlan(tblname, tx);
 
+		profiler.startComponentProfiler("insert");
 		// Insert the record into the record file
 		UpdateScan s = (UpdateScan) p.open();
 		s.insert();
@@ -297,13 +313,16 @@ public class VanillaCoreCrud {
 			s.setVal(fldName, rec.getVal(fldName));
 		RecordId rid = s.getRecordId();
 		s.close();
+		profiler.stopComponentProfiler("insert");
 		
+		profiler.startComponentProfiler("getInsertIndexFile");
 		// Insert the record to all corresponding indexes
 		Set<IndexInfo> indexes = new HashSet<IndexInfo>();
 		for (String fldname : rec.getFldNames()) {
 			List<IndexInfo> iis = VanillaDb.catalogMgr().getIndexInfo(tblname, fldname, tx);
 			indexes.addAll(iis);
 		}
+		profiler.stopComponentProfiler("getInsertIndexFile");
 		
 		profiler.startComponentProfiler("insertIndex");
 		for (IndexInfo ii : indexes) {

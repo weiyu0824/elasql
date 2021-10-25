@@ -11,6 +11,7 @@ import org.elasql.server.Elasql;
 import org.elasql.sql.PrimaryKey;
 import org.vanilladb.core.sql.Constant;
 import org.vanilladb.core.storage.tx.Transaction;
+import org.vanilladb.core.util.TransactionProfiler;
 
 public class TPartTxLocalCache {
 
@@ -99,10 +100,12 @@ public class TPartTxLocalCache {
 	}
 
 	public void flush(SunkPlan plan, List<CachedEntryKey> cachedEntrySet) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 //		Timer timer = Timer.getLocalTimer();
 		
 		// Pass to the transactions
 //		timer.startComponentTimer("Pass to next Tx");
+		profiler.startComponentProfiler("cachePushToTheNextTx");
 		for (Map.Entry<PrimaryKey, CachedRecord> entry : recordCache.entrySet()) {
 			Long[] dests = plan.getLocalPassingTarget(entry.getKey());
 			if (dests != null) {
@@ -115,6 +118,7 @@ public class TPartTxLocalCache {
 				}
 			}
 		}
+		profiler.stopComponentProfiler("cachePushToTheNextTx");
 //		timer.stopComponentTimer("Pass to next Tx");
 
 //		timer.startComponentTimer("Writeback");
@@ -122,8 +126,11 @@ public class TPartTxLocalCache {
 		for (PrimaryKey key : plan.getLocalWriteBackInfo()) {
 
 			CachedRecord rec = null;
-			if (plan.isHereMaster()) 
+			if (plan.isHereMaster()) {
+				profiler.startComponentProfiler("localRecordCacheGetInFlush");
 				rec = recordCache.get(key);
+				profiler.stopComponentProfiler("localRecordCacheGetInFlush");
+			}
 			else
 				rec = cacheMgr.takeFromTx(key, txNum, localStorageId);
 			
@@ -137,17 +144,27 @@ public class TPartTxLocalCache {
 			// it might be pushed from the same transaction on the other
 			// machine.
 			// Migrated data need to insert
-			if (plan.getCacheInsertions().contains(key))
+			if (plan.getCacheInsertions().contains(key)) {
+				profiler.startComponentProfiler("insertToCache");
 				cacheMgr.insertToCache(key, rec, txNum);
-			else
+				profiler.stopComponentProfiler("insertToCache");
+			}
+				
+			else {
+				profiler.startComponentProfiler("writeBack");
 				cacheMgr.writeBack(key, rec, tx);
+				profiler.stopComponentProfiler("writeBack");
+			}
+				
 		}
 //		timer.stopComponentTimer("Writeback");
 		
 		// Clean up migrated rec
 //		timer.startComponentTimer("Delete cached records");
+		profiler.startComponentProfiler("deleteFromCache");
 		for (PrimaryKey key : plan.getCacheDeletions())
 			cacheMgr.deleteFromCache(key, txNum);
+		profiler.stopComponentProfiler("deleteFromCache");
 //		timer.stopComponentTimer("Delete cached records");
 	}
 }

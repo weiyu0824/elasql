@@ -129,7 +129,7 @@ public class TPartCacheMgr implements RemoteRecordReceiver {
 //		localCcMgr.beforeSinkRead(key, tx.getTransactionNumber());
 //		lockTable.sLock(key, tx.getTransactionNumber());
 		
-		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		
 		
 		CachedRecord rec = null;
 		
@@ -140,13 +140,10 @@ public class TPartCacheMgr implements RemoteRecordReceiver {
 			rec = new CachedRecord(rec);
 		}
 			
-		
 		// Read from the local storage
 		if (rec == null) {
 			// PROFILE
-			profiler.startComponentProfiler("VanillaCoreCrud.read");
 			rec = VanillaCoreCrud.read(key, tx);
-			profiler.stopComponentProfiler("VanillaCoreCrud.read");
 		}
 			
 		
@@ -196,7 +193,11 @@ public class TPartCacheMgr implements RemoteRecordReceiver {
 //		localCcMgr.beforeWriteBack(key, txNum);
 //		lockTable.xLock(key, txNum);
 
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		
+		profiler.startComponentProfiler("recordCacheInInsertToCache");
 		recordCache.put(key, rec);
+		profiler.stopComponentProfiler("recordCacheInInsertToCache");
 		
 //		localCcMgr.afterWriteback(key, txNum);
 //		lockTable.release(key, txNum, LockType.X_LOCK);
@@ -205,9 +206,15 @@ public class TPartCacheMgr implements RemoteRecordReceiver {
 	void deleteFromCache(PrimaryKey key, long txNum) {
 //		localCcMgr.beforeWriteBack(key, txNum);
 //		lockTable.xLock(key, txNum);
+		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		
+		profiler.startComponentProfiler("recordCacheDeleteFromCache");
 
 		if (recordCache.remove(key) == null)
 			throw new RuntimeException("There is no record for " + key + " in the cache");
+		
+		profiler.stopComponentProfiler("recordCacheDeleteFromCache");
 		
 //		localCcMgr.afterWriteback(key, txNum);
 //		lockTable.release(key, txNum, LockType.X_LOCK);
@@ -216,13 +223,20 @@ public class TPartCacheMgr implements RemoteRecordReceiver {
 	void writeBack(PrimaryKey key, CachedRecord rec, Transaction tx) {
 //		localCcMgr.beforeWriteBack(key, tx.getTransactionNumber());
 //		lockTable.xLock(key, tx.getTransactionNumber());
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		
+		profiler.startComponentProfiler("recordCacheInWriteBack");
 		// Check if there is corresponding keys in the cache
-		if (recordCache.containsKey(key))
+		if (recordCache.containsKey(key)) {
 			recordCache.put(key, rec);
-		else 
+			profiler.stopComponentProfiler("recordCacheInWriteBack");
+		}
+		else {
+			profiler.stopComponentProfiler("recordCacheInWriteBack");
 			// If it was not in the cache, write-back to the local storage
 			writeToVanillaCore(key, rec, tx);
+		}
+			
 		
 //		localCcMgr.afterWriteback(key, tx.getTransactionNumber());
 //		lockTable.release(key, tx.getTransactionNumber(), LockType.X_LOCK);
