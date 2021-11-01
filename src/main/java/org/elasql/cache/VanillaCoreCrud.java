@@ -65,12 +65,16 @@ public class VanillaCoreCrud {
 		profiler.startComponentProfiler("readSelectByBestMatchedIndex");
 		// Create a IndexSelectPlan if there is matching index in the predicate
 		selectPlan = selectByBestMatchedIndex(tblName, tp, key, tx);
-		if (selectPlan == null)
-			selectPlan = new SelectPlan(tp, key.toPredicate());
-		else
-			selectPlan = new SelectPlan(selectPlan, key.toPredicate());
 		profiler.stopComponentProfiler("readSelectByBestMatchedIndex");
 		
+		profiler.startComponentProfiler("newSelectPlan");
+		if (selectPlan == null) {
+			selectPlan = new SelectPlan(tp, key.toPredicate());
+		}	
+		else {
+			selectPlan = new SelectPlan(selectPlan, key.toPredicate());
+		}
+		profiler.stopComponentProfiler("newSelectPlan");
 		
 		profiler.startComponentProfiler("read");
 		SelectScan s = (SelectScan) selectPlan.open();
@@ -79,8 +83,11 @@ public class VanillaCoreCrud {
 
 		if (s.next()) {
 			rec = new CachedRecord(key);
-			for (String fld : tp.schema().fields())
+			for (String fld : tp.schema().fields()) {
+				profiler.startComponentProfiler("scanGetVal");
 				rec.addFldVal(fld, s.getVal(fld));
+				profiler.stopComponentProfiler("scanGetVal");
+			}
 		}
 		s.close();
 		profiler.stopComponentProfiler("read");
@@ -198,13 +205,16 @@ public class VanillaCoreCrud {
 
 	public static boolean update(PrimaryKey key, CachedRecord rec, Transaction tx) {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("allUpdate");
 		boolean found = false;
 		String tblName = key.getTableName();
 		
 //		Timer.getLocalTimer().startComponentTimer("Update to table " + tblName);
-		
+		profiler.startComponentProfiler("openTablePlan");
 		TablePlan tp = new TablePlan(tblName, tx);
+		profiler.stopComponentProfiler("openTablePlan");
 		Plan selectPlan = null;
+		
 		
 		profiler.startComponentProfiler("updateSelectByBestMatchedIndex");
 		// Create a IndexSelectPlan if there is matching index in the predicate
@@ -226,6 +236,7 @@ public class VanillaCoreCrud {
 		profiler.stopComponentProfiler("openUpdateIndexFile");
 		
 		// Open the scan
+		profiler.startComponentProfiler("UpdateScanIteration");
 		UpdateScan s = (UpdateScan) selectPlan.open();
 		s.beforeFirst();
 		while (s.next()) {
@@ -280,25 +291,31 @@ public class VanillaCoreCrud {
 			}
 			profiler.stopComponentProfiler("updateIndex");
 		}
+		profiler.stopComponentProfiler("UpdateScanIteration");
 		
 		profiler.startComponentProfiler("updateCloseIndex");
 		// Close opened indexes and the record file
 		for (Index index : modifiedIndexes)
 			index.close();
 		profiler.stopComponentProfiler("updateCloseIndex");
+		profiler.startComponentProfiler("closeUpdateScan");
 		s.close();
+		profiler.stopComponentProfiler("closeUpdateScan");
 		
+		profiler.startComponentProfiler("updateEndTxStatement");
 		tx.endStatement();
+		profiler.stopComponentProfiler("updateEndTxStatement");
 //		Timer.getLocalTimer().stopComponentTimer("Update to table " + tblName);
 
 		// XXX: Do we need this ?
 		// VanillaDdDb.statMgr().countRecordUpdates(tblname, count);
-		
+		profiler.stopComponentProfiler("allUpdate");
 		return found;
 	}
 
 	public static void insert(PrimaryKey key, CachedRecord rec, Transaction tx) {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("allInsert");
 		String tblname = key.getTableName();
 		
 //		Timer.getLocalTimer().startComponentTimer("Insert to table " + tblname);
@@ -333,6 +350,7 @@ public class VanillaCoreCrud {
 		profiler.stopComponentProfiler("insertIndex");
 		
 		tx.endStatement();
+		profiler.stopComponentProfiler("allInsert");
 //		Timer.getLocalTimer().stopComponentTimer("Insert to table " + tblname);
 		
 		// XXX: Do we need this ?
