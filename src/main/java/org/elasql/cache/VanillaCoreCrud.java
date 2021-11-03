@@ -76,21 +76,33 @@ public class VanillaCoreCrud {
 		}
 		profiler.stopComponentProfiler("newSelectPlan");
 		
-		profiler.startComponentProfiler("read");
+		profiler.startComponentProfiler("readRecord");
+		profiler.startComponentProfiler("readOpenSelectPlan");
 		SelectScan s = (SelectScan) selectPlan.open();
+		profiler.stopComponentProfiler("readOpenSelectPlan");
+		profiler.startComponentProfiler("readBeforeFirst");
 		s.beforeFirst();
+		profiler.stopComponentProfiler("readBeforeFirst");
 		CachedRecord rec = null;
 
-		if (s.next()) {
+		profiler.startComponentProfiler("readSNext");
+		boolean hasNext = s.next();
+		profiler.stopComponentProfiler("readSNext");
+		if (hasNext) {
 			rec = new CachedRecord(key);
 			for (String fld : tp.schema().fields()) {
 				profiler.startComponentProfiler("scanGetVal");
-				rec.addFldVal(fld, s.getVal(fld));
+				Constant c = s.getVal(fld);
 				profiler.stopComponentProfiler("scanGetVal");
+				profiler.startComponentProfiler("scanAddFldVal");
+				rec.addFldVal(fld, c);
+				profiler.stopComponentProfiler("scanAddFldVal");
 			}
 		}
+		profiler.startComponentProfiler("readScanClose");
 		s.close();
-		profiler.stopComponentProfiler("read");
+		profiler.stopComponentProfiler("readScanClose");
+		profiler.stopComponentProfiler("readRecord");
 		
 		tx.endStatement();
 
@@ -207,7 +219,9 @@ public class VanillaCoreCrud {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		profiler.startComponentProfiler("allUpdate");
 		boolean found = false;
+		profiler.startComponentProfiler("updateGetTableName");
 		String tblName = key.getTableName();
+		profiler.stopComponentProfiler("updateGetTableName");
 		
 //		Timer.getLocalTimer().startComponentTimer("Update to table " + tblName);
 		profiler.startComponentProfiler("openTablePlan");
@@ -236,13 +250,20 @@ public class VanillaCoreCrud {
 		profiler.stopComponentProfiler("openUpdateIndexFile");
 		
 		// Open the scan
-		profiler.startComponentProfiler("UpdateScanIteration");
+		profiler.startComponentProfiler("updateScanIteration");
 		UpdateScan s = (UpdateScan) selectPlan.open();
+		profiler.startComponentProfiler("updateScanBeforeFirst");
 		s.beforeFirst();
-		while (s.next()) {
+		profiler.stopComponentProfiler("updateScanBeforeFirst");
+		
+		profiler.startComponentProfiler("updateScanNext");
+		boolean nn = s.next();
+		profiler.stopComponentProfiler("updateScanNext");
+		
+		while (nn) {
 			found = true;
 			
-			profiler.startComponentProfiler("update");
+			profiler.startComponentProfiler("updateRecord");
 			// Construct a mapping from field names to values
 			Map<String, Constant> oldValMap = new HashMap<String, Constant>();
 			Map<String, Constant> newValMap = new HashMap<String, Constant>();
@@ -256,7 +277,7 @@ public class VanillaCoreCrud {
 			}
 			
 			RecordId rid = s.getRecordId();
-			profiler.stopComponentProfiler("update");
+			profiler.stopComponentProfiler("updateRecord");
 			
 			profiler.startComponentProfiler("updateIndex");
 			// Update the indexes
@@ -290,8 +311,12 @@ public class VanillaCoreCrud {
 				index.close();
 			}
 			profiler.stopComponentProfiler("updateIndex");
+			
+			profiler.startComponentProfiler("updateScanNext");
+			nn = s.next();
+			profiler.stopComponentProfiler("updateScanNext");
 		}
-		profiler.stopComponentProfiler("UpdateScanIteration");
+		profiler.stopComponentProfiler("updateScanIteration");
 		
 		profiler.startComponentProfiler("updateCloseIndex");
 		// Close opened indexes and the record file
@@ -322,7 +347,7 @@ public class VanillaCoreCrud {
 		
 		Plan p = new TablePlan(tblname, tx);
 
-		profiler.startComponentProfiler("insert");
+		profiler.startComponentProfiler("insertRecord");
 		// Insert the record into the record file
 		UpdateScan s = (UpdateScan) p.open();
 		s.insert();
@@ -330,7 +355,7 @@ public class VanillaCoreCrud {
 			s.setVal(fldName, rec.getVal(fldName));
 		RecordId rid = s.getRecordId();
 		s.close();
-		profiler.stopComponentProfiler("insert");
+		profiler.stopComponentProfiler("insertRecord");
 		
 		profiler.startComponentProfiler("getInsertIndexFile");
 		// Insert the record to all corresponding indexes

@@ -8,6 +8,7 @@ import java.util.Set;
 import org.elasql.sql.PrimaryKey;
 import org.elasql.storage.metadata.PartitionMetaMgr;
 import org.elasql.util.ElasqlProperties;
+import org.vanilladb.core.util.TransactionProfiler;
 
 public class FusionTable {
 
@@ -269,6 +270,9 @@ public class FusionTable {
 	}
 
 	private int swapOutRecord() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("fusionTableSwapOutRecord");
+		
 		// Select a slot (using clock)
 		while (locations[nextSlotToReplace].referenced) {
 			locations[nextSlotToReplace].referenced = false;
@@ -281,6 +285,8 @@ public class FusionTable {
 		keyToSlotIds.remove(locations[swapSlot].key);
 		overflowedKeys.put(locations[swapSlot].key, locations[swapSlot].partId);
 		locations[swapSlot].key = null;
+		
+		profiler.stopComponentProfiler("fusionTableSwapOutRecord");
 
 		return swapSlot;
 	}
