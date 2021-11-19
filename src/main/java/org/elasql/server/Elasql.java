@@ -100,6 +100,7 @@ public class Elasql extends VanillaDb {
 		SERVICE_TYPE = ServiceType.fromInteger(type); 
 		ENABLE_STAND_ALONE_SEQUENCER = ElasqlProperties.getLoader().getPropertyAsBoolean( 
 				Elasql.class.getName() + ".ENABLE_STAND_ALONE_SEQUENCER", false);
+		System.out.println("Profile Latching---------------------------------------------------");
 	} 
  
 	// DD modules 
